@@ -5,6 +5,8 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Backend.Contracts.Responses;
 using Backend.Middleware;
+using Backend.Models;
+using Backend.Options;
 using Backend.Repositories;
 using Backend.Services;
 using Backend.Validators;
@@ -13,12 +15,33 @@ using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Versioning;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
+using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Limits.MaxRequestBodySize = 1024 * 1024; // 1 MB request cap
+});
+
+builder.Services.Configure<MongoDbSettings>(builder.Configuration.GetSection("MongoDb"));
+builder.Services.AddSingleton<IMongoClient>(sp =>
+{
+    var settings = sp.GetRequiredService<IOptions<MongoDbSettings>>().Value;
+    if (string.IsNullOrWhiteSpace(settings.ConnectionString))
+    {
+        throw new InvalidOperationException("MongoDB connection string is missing.");
+    }
+
+    return new MongoClient(settings.ConnectionString);
+});
+builder.Services.AddScoped<IMongoCollection<Book>>(sp =>
+{
+    var mongoSettings = sp.GetRequiredService<IOptions<MongoDbSettings>>().Value;
+    var client = sp.GetRequiredService<IMongoClient>();
+    var database = client.GetDatabase(mongoSettings.DatabaseName);
+    return database.GetCollection<Book>(mongoSettings.BooksCollectionName);
 });
 
 builder.Services.AddRouting(options => options.LowercaseUrls = true);
@@ -96,7 +119,7 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<CreateBookRequestValidator>();
 
-builder.Services.AddScoped<IBookRepository, InMemoryBookRepository>();
+builder.Services.AddScoped<IBookRepository, MongoBookRepository>();
 builder.Services.AddScoped<IBookService, BookService>();
 builder.Services.AddSingleton<IInputSanitizer, InputSanitizer>();
 
@@ -120,6 +143,8 @@ else
 }
 
 app.UseHttpsRedirection();
+
+app.UseRouting();
 
 app.UseCors("AngularClient");
 

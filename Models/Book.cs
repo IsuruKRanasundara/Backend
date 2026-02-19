@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace Backend.Models;
 
@@ -7,6 +8,7 @@ namespace Backend.Models;
 /// </summary>
 public class Book
 {
+    [BsonId]
     public int Id { get; set; }
 
     [Required]
