@@ -63,8 +63,8 @@ app.use(
             err.status && err.status >= 400 && err.status < 600
                 ? err.status
                 : err.statusCode && err.statusCode >= 400 && err.statusCode < 600
-                  ? err.statusCode
-                  : 500;
+                    ? err.statusCode
+                    : 500;
 
         res.status(statusCode).json({
             success: false,

@@ -1,49 +1,73 @@
 import { Request, Response } from "express";
+import { users } from "../data/store";
+import { AuthRequest } from "../middleware/auth.middleware";
 
 export class UserController {
-    /**
-     * GET /api/users/profile
-     * Returns the student profile consumed by Dashboard and Profile pages.
-     * Shape must match ApiProfile in the frontend (id, name, faculty, degree,
-     * completedCredits, totalCredits).
-     */
-    static getProfile(_req: Request, res: Response): void {
-        res.json({
-            id: 1,                              // numeric id used as fallback studentId
-            name: "Asel Wijesinghe",
-            faculty: "Faculty of Computing",
-            degree: "3rd Year — BSc Software Engineering",
-            completedCredits: 90,
-            totalCredits: 120,
-            gpa: 3.72,
-            email: "asel.w@campus.edu",
-            studentId: "CS-2022-095",
-            phone: "+94 77 123 4567",
-            address: "Colombo, Sri Lanka",
-            enrolledYear: 2022,
-            expectedGraduation: 2026,
-        });
+    // GET /api/users/profile  — current user's profile
+    static getProfile(req: AuthRequest, res: Response): void {
+        const user = users.find((u) => u.id === req.userId);
+        if (!user) {
+            res.status(404).json({ success: false, message: "User not found" });
+            return;
+        }
+        const { passwordHash: _omit, ...safeUser } = user;
+        res.json({ success: true, data: safeUser });
     }
 
-    /**
-     * PUT /api/users/profile
-     * Accepts partial profile updates — echoes them back (dummy: no DB).
-     */
-    static updateProfile(req: Request, res: Response): void {
-        const updates = req.body as Record<string, unknown>;
+    // PATCH /api/users/profile  — update current user's profile fields
+    static updateProfile(req: AuthRequest, res: Response): void {
+        const user = users.find((u) => u.id === req.userId);
+        if (!user) {
+            res.status(404).json({ success: false, message: "User not found" });
+            return;
+        }
 
+        // Only allow safe fields to be updated
+        const allowedFields: Array<keyof typeof user> = [
+            "name",
+            "faculty",
+            "degree",
+            "avatar"
+        ];
+
+        let updated = false;
+        for (const field of allowedFields) {
+            if (req.body[field] !== undefined) {
+                (user as any)[field] = req.body[field];
+                updated = true;
+            }
+        }
+
+        if (!updated) {
+            res.status(400).json({
+                success: false,
+                message: "No valid fields provided for update"
+            });
+            return;
+        }
+
+        const { passwordHash: _omit, ...safeUser } = user;
         res.json({
             success: true,
             message: "Profile updated successfully",
-            profile: {
-                id: 1,
-                name: (updates.name as string) ?? "Asel Wijesinghe",
-                faculty: "Faculty of Computing",
-                degree: "3rd Year — BSc Software Engineering",
-                completedCredits: 90,
-                totalCredits: 120,
-                ...updates,
-            },
+            data: safeUser
         });
+    }
+
+    // GET /api/users/:id  — get any user by ID (e.g. view classmate profile)
+    static getUserById(req: Request, res: Response): void {
+        const user = users.find((u) => u.id === req.params.id);
+        if (!user) {
+            res.status(404).json({ success: false, message: "User not found" });
+            return;
+        }
+        const { passwordHash: _omit, ...safeUser } = user;
+        res.json({ success: true, data: safeUser });
+    }
+
+    // GET /api/users  — list all users (admin use-case)
+    static getUsers(_req: Request, res: Response): void {
+        const safeUsers = users.map(({ passwordHash: _omit, ...u }) => u);
+        res.json({ success: true, count: safeUsers.length, data: safeUsers });
     }
 }
